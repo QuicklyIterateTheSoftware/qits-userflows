@@ -4,16 +4,16 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <!-- Standalone parent for the extracted qits-userflows repo. Keeps the same
-         eu.wohlben:qits:1.0.0-SNAPSHOT coordinates the child's <parent> already points at
-         (../pom.xml), so the module builds unchanged now that it no longer lives under the
+    <!-- Standalone parent for the extracted qits-userflows repo. Its coordinates are namespaced
+         so publishing this reactor cannot collide with the old monorepo parent, while the child
+         still resolves it through ../pom.xml and a clone remains self-contained.
          qits-backend monorepo root. Trimmed to only what this library needs — the quarkus-bom
          import (for its jackson-databind / junit-jupiter versions) and the compiler/surefire
          plugin pins. The monorepo's app-wide machinery (spotless, the :8080 dev-guard,
          isolated-test chunking, enforcer, jandex) is intentionally omitted. -->
-    <groupId>eu.wohlben</groupId>
-    <artifactId>qits</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
+    <groupId>eu.wohlben.qits</groupId>
+    <artifactId>qits-userflows-parent</artifactId>
+    <version>1.0.0</version>
     <packaging>pom</packaging>
 
     <modules>
