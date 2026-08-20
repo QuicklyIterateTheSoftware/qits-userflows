@@ -37,3 +37,9 @@ classpath. It depends on **none** of the app modules; it drives qits by URL only
   `docs/epics/qits-userflows/features/2026-07-19_qits-userflows.md`.
 - Playwright is pinned (`playwright.version`) to the Chromium baked into `docker/qits/Dockerfile`;
   bump both in lockstep. Never needs `-Dqits.variant`.
+- **Releasing this library**: push a branch to the platform git host and release it through
+  `POST /workspaces/api/branches/release?repositoryId=qits-userflows` (or the workspace UI). A
+  library release merges into `main` only — `promotions` comes back empty because nothing
+  deploys — and the release pipeline publishes `eu.wohlben.qits:qits-userflows` under the minted
+  CalVer version to the platform Maven repository. Consumers pick it up via their upstream bump
+  trains. See release-workflow-in-workspaces.md in the qits-qits wrapper.
