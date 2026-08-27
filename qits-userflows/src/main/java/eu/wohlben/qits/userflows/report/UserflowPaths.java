@@ -21,4 +21,14 @@ public final class UserflowPaths {
   public static Path reportDir(String slug) {
     return outputRoot().resolve(slug);
   }
+
+  /**
+   * A categorized story's directory: {@code <root>/<category-slug>/<story-slug>/}. A blank
+   * category is the flat layout — the two spellings agree by construction.
+   */
+  public static Path reportDir(String categorySlug, String slug) {
+    return categorySlug == null || categorySlug.isBlank()
+        ? reportDir(slug)
+        : outputRoot().resolve(categorySlug).resolve(slug);
+  }
 }

@@ -6,8 +6,9 @@ classpath. It depends on **none** of the app modules; it drives qits by URL only
 
 ## What lives here
 
-- **Annotations**: `@UserStory`, `@UserStoryDescription`, `@ExpectedFailure`, `@UserflowPrecondition`,
-  `@UserflowRunsAfter`.
+- **Annotations**: `@UserStory` (with an optional `category` — a categorized story emits under
+  `<category-slug>/<story-slug>/`, so the directory layout carries the grouping),
+  `@UserStoryDescription`, `@ExpectedFailure`, `@UserflowPrecondition`, `@UserflowRunsAfter`.
 - **`Flow`** — the step-recording facade over Playwright's `Page` (every verb records a step).
 - **`Interactions`** — the service-level recording facade: `happened(from, to, "GET /idp/jwks")`
   records a service-to-service interaction (a step + a structured entry the report renders as a

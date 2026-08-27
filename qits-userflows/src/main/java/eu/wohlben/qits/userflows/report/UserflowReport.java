@@ -16,6 +16,7 @@ import java.util.List;
 @JsonPropertyOrder({
   "story",
   "slug",
+  "category",
   "description",
   "steps",
   "definitionHash",
@@ -27,6 +28,7 @@ import java.util.List;
 public record UserflowReport(
     String story,
     String slug,
+    String category,
     String description,
     List<Step> steps,
     String definitionHash,

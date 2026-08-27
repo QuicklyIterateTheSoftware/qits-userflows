@@ -18,7 +18,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
  * emits the report (see {@link UserStoryExtension}).
  *
  * <p>The {@link #value()} is the story's display name: it is slugged into the report directory name
- * and is the future {@code qits.userflow.name} artifacts-metadata key.
+ * and is the future {@code qits.userflow.name} artifacts-metadata key. An optional
+ * {@link #category()} groups related stories: a categorized story emits under
+ * {@code target/userstories/<category-slug>/<story-slug>/}, so the DIRECTORY LAYOUT carries the
+ * grouping — a reader derives the hierarchy from paths alone, and an uncategorized story keeps the
+ * flat layout it always had.
  *
  * <pre>{@code
  * @UserStory("Create a greeting")
@@ -43,4 +47,10 @@ public @interface UserStory {
 
   /** The story's display name — also the (slugged) report directory name. */
   String value();
+
+  /**
+   * The story's category (e.g. {@code "authentication"}) — slugged into a parent directory level
+   * and recorded in the sidecar. Empty (the default) means uncategorized: the flat layout.
+   */
+  String category() default "";
 }
