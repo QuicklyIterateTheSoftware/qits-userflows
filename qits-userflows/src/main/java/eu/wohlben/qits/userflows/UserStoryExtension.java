@@ -40,6 +40,11 @@ import org.junit.jupiter.api.extension.TestExecutionExceptionHandler;
  * report ({@code userflow.json} + {@code user-story.md} + screenshots + {@code recording.webm})
  * under {@code target/userstories/<slug>/}.
  *
+ * <p>The browser is <b>parameter-driven</b>: Chromium (and Playwright itself) is only created when
+ * the story method declares a {@link Flow} parameter. A story that takes only {@link Interactions}
+ * (and/or {@link UserflowContext}) is a browserless <b>service story</b> — no driver, no video, no
+ * screenshots; its report carries steps and interactions.
+ *
  * <p>Attached automatically via {@link UserStory @UserStory}'s {@code @ExtendWith}; stories never
  * reference it directly.
  *
@@ -117,6 +122,35 @@ public final class UserStoryExtension
     Path reportDir = UserflowPaths.reportDir(slug);
     freshDirectory(reportDir);
 
+    StepRecorder recorder = new StepRecorder();
+    Interactions interactions = new Interactions(recorder);
+
+    // The browser exists only for stories that ask for a Flow — a browserless service story never
+    // even creates Playwright (no driver extraction, no browser download).
+    boolean wantsBrowser =
+        Stream.of(method.getParameterTypes()).anyMatch(type -> type == Flow.class);
+    if (!wantsBrowser) {
+      context
+          .getStore(NAMESPACE)
+          .put(
+              STATE_KEY,
+              new StoryState(
+                  name,
+                  slug,
+                  description == null ? null : description.value(),
+                  expectFailure,
+                  reportDir,
+                  null,
+                  null,
+                  null,
+                  null,
+                  null,
+                  null,
+                  recorder,
+                  interactions));
+      return;
+    }
+
     Path videoDir = reportDir.resolve(".video");
     Playwright playwright = createPlaywright();
     Browser browser = null;
@@ -134,7 +168,7 @@ public final class UserStoryExtension
       Video video = page.video();
 
       String baseUrl = System.getProperty(BASE_URL_PROPERTY, DEFAULT_BASE_URL);
-      Flow flow = new Flow(page, reportDir, baseUrl);
+      Flow flow = new Flow(page, reportDir, baseUrl, recorder);
 
       StoryState state =
           new StoryState(
@@ -148,7 +182,9 @@ public final class UserStoryExtension
               browser,
               browserContext,
               video,
-              flow);
+              flow,
+              recorder,
+              interactions);
       context.getStore(NAMESPACE).put(STATE_KEY, state);
     } catch (RuntimeException | Error e) {
       closeQuietly(browser);
@@ -161,14 +197,18 @@ public final class UserStoryExtension
   public boolean supportsParameter(ParameterContext parameterContext, ExtensionContext context)
       throws ParameterResolutionException {
     Class<?> type = parameterContext.getParameter().getType();
-    return type == Flow.class || type == UserflowContext.class;
+    return type == Flow.class || type == Interactions.class || type == UserflowContext.class;
   }
 
   @Override
   public Object resolveParameter(ParameterContext parameterContext, ExtensionContext context)
       throws ParameterResolutionException {
-    if (parameterContext.getParameter().getType() == UserflowContext.class) {
+    Class<?> type = parameterContext.getParameter().getType();
+    if (type == UserflowContext.class) {
       return CONTEXT;
+    }
+    if (type == Interactions.class) {
+      return state(context).interactions;
     }
     return state(context).flow;
   }
@@ -178,7 +218,7 @@ public final class UserStoryExtension
       throws Throwable {
     StoryState state = state(context);
     state.outcome = UserflowReport.FAILED;
-    state.flow.recordFailure(messageOf(throwable));
+    state.recorder.recordFailure(messageOf(throwable));
     if (!state.expectFailure) {
       throw throwable; // a real story failure still fails the build
     }
@@ -211,16 +251,18 @@ public final class UserStoryExtension
   private void finalizeVideoAndReport(StoryState state) {
     // Video is best-effort: a story that recorded steps must always get its report, so a failure
     // finalizing the webm must not cost us userflow.json / user-story.md.
-    UserflowReport.Video video = saveVideo(state);
+    UserflowReport.Video video = state.browserContext == null ? null : saveVideo(state);
 
+    List<UserflowReport.Interaction> interactions = state.interactions.emit();
     UserflowReport report =
         new UserflowReport(
             state.name,
             state.slug,
             state.description,
-            List.copyOf(state.flow.steps()),
-            state.flow.definitionHash(),
-            state.flow.emitScreenshots(),
+            List.copyOf(state.recorder.steps()),
+            state.recorder.definitionHash(),
+            interactions.isEmpty() ? null : interactions,
+            state.flow == null ? List.of() : state.flow.emitScreenshots(),
             video,
             state.outcome);
 
@@ -420,7 +462,11 @@ public final class UserStoryExtension
     return context.getStore(NAMESPACE).get(STATE_KEY, StoryState.class);
   }
 
-  /** Mutable per-story holder kept in the extension store. */
+  /**
+   * Mutable per-story holder kept in the extension store. The Playwright fields ({@code playwright}
+   * through {@code flow}) are all {@code null} for a browserless story; {@code recorder} and
+   * {@code interactions} always exist.
+   */
   private static final class StoryState {
     final String name;
     final String slug;
@@ -433,6 +479,8 @@ public final class UserStoryExtension
     final BrowserContext browserContext;
     final Video video;
     final Flow flow;
+    final StepRecorder recorder;
+    final Interactions interactions;
     volatile String outcome = UserflowReport.PASSED;
 
     StoryState(
@@ -446,7 +494,9 @@ public final class UserStoryExtension
         Browser browser,
         BrowserContext browserContext,
         Video video,
-        Flow flow) {
+        Flow flow,
+        StepRecorder recorder,
+        Interactions interactions) {
       this.name = name;
       this.slug = slug;
       this.description = description;
@@ -458,6 +508,8 @@ public final class UserStoryExtension
       this.browserContext = browserContext;
       this.video = video;
       this.flow = flow;
+      this.recorder = recorder;
+      this.interactions = interactions;
     }
   }
 }

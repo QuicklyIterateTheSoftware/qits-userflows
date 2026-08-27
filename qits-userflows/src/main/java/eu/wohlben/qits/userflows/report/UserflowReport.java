@@ -19,6 +19,7 @@ import java.util.List;
   "description",
   "steps",
   "definitionHash",
+  "interactions",
   "screenshots",
   "video",
   "outcome"
@@ -29,6 +30,7 @@ public record UserflowReport(
     String description,
     List<Step> steps,
     String definitionHash,
+    List<Interaction> interactions,
     List<Screenshot> screenshots,
     Video video,
     String outcome) {
@@ -42,6 +44,17 @@ public record UserflowReport(
   @JsonInclude(JsonInclude.Include.NON_NULL)
   @JsonPropertyOrder({"id", "line"})
   public record Step(String id, String line) {}
+
+  /**
+   * One recorded service-to-service interaction: {@code from} called {@code to}, described by the
+   * story's static description (e.g. {@code "GET /idp/jwks"}). {@code step} is the {@link
+   * Step#id() id} of the step that recorded it. Renderers draw these — in recorded order — as a
+   * sequence diagram; the field is omitted entirely for stories that record none, keeping their
+   * sidecars byte-identical to the pre-interactions shape.
+   */
+  @JsonInclude(JsonInclude.Include.NON_NULL)
+  @JsonPropertyOrder({"from", "to", "description", "step"})
+  public record Interaction(String from, String to, String description, String step) {}
 
   /**
    * A captured screenshot. {@code step} is the {@link Step#id() id} of the screenshot step that
