@@ -9,15 +9,24 @@ classpath. It depends on **none** of the app modules; it drives qits by URL only
 - **Annotations**: `@UserStory`, `@UserStoryDescription`, `@ExpectedFailure`, `@UserflowPrecondition`,
   `@UserflowRunsAfter`.
 - **`Flow`** — the step-recording facade over Playwright's `Page` (every verb records a step).
-- **`UserStoryExtension`** — the JUnit 5 extension: browser/video lifecycle, `Flow`/`UserflowContext`
-  injection, outcome tracking, report emission, the passed-story registry, and the
-  `ExecutionCondition` that skips a dependent whose precondition didn't pass.
+- **`Interactions`** — the service-level recording facade: `happened(from, to, "GET /idp/jwks")`
+  records a service-to-service interaction (a step + a structured entry the report renders as a
+  mermaid sequence diagram), `note(line)` a narrative step. A story method that declares
+  `Interactions` but no `Flow` is **browserless**: no Chromium is launched, no video/screenshots
+  are produced. A mixed story may take both — they share one `StepRecorder`, so steps interleave
+  in call order into a single log and definition hash.
+- **`UserStoryExtension`** — the JUnit 5 extension: browser/video lifecycle (browser only when the
+  story asks for a `Flow`), `Flow`/`Interactions`/`UserflowContext` injection, outcome tracking,
+  report emission, the passed-story registry, and the `ExecutionCondition` that skips a dependent
+  whose precondition didn't pass.
 - **`UserflowClassOrderer`** — topological class ordering over the precondition + runs-after graph.
 - **`UserflowContext`** — the shared key→value store for dependency handoff.
-- **`report/`** — the canonical `UserflowReport` model, the JSON + markdown renderers, and
+- **`report/`** — the canonical `UserflowReport` model (incl. `interactions`), the JSON + markdown
+  renderers (the markdown gets an `## Interactions` mermaid `sequenceDiagram` section), and
   `ReportAssertions` / `Slugs` / `Hashing` / `UserflowPaths`.
 - **Utilities**: `UserflowTarget` (base URL + reachability self-skip), `HarnessResources` (bundled
-  test-page URLs), `Urls`.
+  test-page URLs), `HarnessHttpServer` (recording local HTTP server for service harness stories),
+  `Urls`.
 
 ## Rules
 

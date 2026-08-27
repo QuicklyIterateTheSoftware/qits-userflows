@@ -91,6 +91,19 @@ public final class ReportAssertions {
           () -> "screenshot not linked to a screenshot step: " + shot);
     }
 
+    if (report.interactions() != null) {
+      for (UserflowReport.Interaction interaction : report.interactions()) {
+        // the link is by explicit step id, same discipline as a screenshot's
+        assertTrue(
+            report.steps().stream().anyMatch(step -> step.id().equals(interaction.step())),
+            () -> "interaction references unknown step id: " + interaction);
+        assertTrue(
+            md.contains(mermaidLine(interaction)),
+            () -> "interaction missing from the mermaid diagram: " + mermaidLine(interaction));
+      }
+      assertTrue(md.contains("```mermaid"), "user-story.md has interactions but no mermaid fence");
+    }
+
     if (report.video() != null) {
       Path webm = dir.resolve(report.video().path());
       assertTrue(sizeOf(webm) > 0, () -> "recording.webm missing or empty: " + webm);
@@ -113,6 +126,33 @@ public final class ReportAssertions {
   }
 
   /**
+   * Assert the sidecar records the interaction {@code from -> to: description} and that its
+   * by-step-id link resolves to a real step.
+   */
+  public static void assertInteraction(String slug, String from, String to, String description) {
+    UserflowReport report = read(slug);
+    assertTrue(
+        report.interactions() != null,
+        () -> "no interactions recorded in " + slug + "'s sidecar");
+    UserflowReport.Interaction match =
+        report.interactions().stream()
+            .filter(
+                interaction ->
+                    interaction.from().equals(from)
+                        && interaction.to().equals(to)
+                        && interaction.description().equals(description))
+            .findFirst()
+            .orElse(null);
+    assertTrue(
+        match != null,
+        () -> "no interaction " + from + " -> " + to + ": " + description + " in " + slug);
+    assertTrue(
+        match != null
+            && report.steps().stream().anyMatch(step -> step.id().equals(match.step())),
+        () -> "interaction references unknown step id: " + match);
+  }
+
+  /**
    * Assert some step carries the explicit id {@code id} (e.g. one assigned via {@code Flow.as}).
    */
   public static void assertStepId(String slug, String id) {
@@ -128,6 +168,11 @@ public final class ReportAssertions {
     for (String s : substrings) {
       assertTrue(md.contains(s), () -> "user-story.md missing expected text: " + s);
     }
+  }
+
+  /** The exact arrow line {@link MarkdownReportRenderer} draws for {@code interaction}. */
+  private static String mermaidLine(UserflowReport.Interaction interaction) {
+    return interaction.from() + "->>" + interaction.to() + ": " + interaction.description();
   }
 
   private static long sizeOf(Path path) {
