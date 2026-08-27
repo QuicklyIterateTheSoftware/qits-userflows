@@ -13,7 +13,7 @@
          isolated-test chunking, enforcer, jandex) is intentionally omitted. -->
     <groupId>eu.wohlben.qits</groupId>
     <artifactId>qits-userflows-parent</artifactId>
-    <version>2026.827.71231</version>
+    <version>2026.827.83520</version>
     <packaging>pom</packaging>
 
     <modules>

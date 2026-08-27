@@ -118,8 +118,13 @@ public final class UserStoryExtension
 
     String name = story.value();
     String slug = Slugs.slug(name);
-    checkForCollision(slug, name);
-    Path reportDir = UserflowPaths.reportDir(slug);
+    // A categorized story emits under <category-slug>/<slug>/ — the directory layout is what
+    // carries the grouping to a reader. The collision registry keys on the full path, so one
+    // story name may exist in two categories without their reports overwriting each other.
+    String categorySlug = story.category().isBlank() ? "" : Slugs.slug(story.category());
+    String category = story.category().isBlank() ? null : story.category();
+    checkForCollision(categorySlug.isEmpty() ? slug : categorySlug + "/" + slug, name);
+    Path reportDir = UserflowPaths.reportDir(categorySlug, slug);
     freshDirectory(reportDir);
 
     StepRecorder recorder = new StepRecorder();
@@ -137,6 +142,7 @@ public final class UserStoryExtension
               new StoryState(
                   name,
                   slug,
+                  category,
                   description == null ? null : description.value(),
                   expectFailure,
                   reportDir,
@@ -174,6 +180,7 @@ public final class UserStoryExtension
           new StoryState(
               name,
               slug,
+              category,
               description == null ? null : description.value(),
               expectFailure,
               reportDir,
@@ -258,6 +265,7 @@ public final class UserStoryExtension
         new UserflowReport(
             state.name,
             state.slug,
+            state.category,
             state.description,
             List.copyOf(state.recorder.steps()),
             state.recorder.definitionHash(),
@@ -470,6 +478,7 @@ public final class UserStoryExtension
   private static final class StoryState {
     final String name;
     final String slug;
+    final String category;
     final String description;
     final boolean expectFailure;
     final Path reportDir;
@@ -486,6 +495,7 @@ public final class UserStoryExtension
     StoryState(
         String name,
         String slug,
+        String category,
         String description,
         boolean expectFailure,
         Path reportDir,
@@ -499,6 +509,7 @@ public final class UserStoryExtension
         Interactions interactions) {
       this.name = name;
       this.slug = slug;
+      this.category = category;
       this.description = description;
       this.expectFailure = expectFailure;
       this.reportDir = reportDir;

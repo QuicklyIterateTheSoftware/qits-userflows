@@ -26,7 +26,12 @@ public final class ReportAssertions {
 
   /** Parse a story's canonical {@code userflow.json}. */
   public static UserflowReport read(String slug) {
-    Path json = UserflowPaths.reportDir(slug).resolve(JsonReportWriter.FILE_NAME);
+    return read("", slug);
+  }
+
+  /** The categorized spelling — {@code <category-slug>/<slug>/userflow.json}. */
+  public static UserflowReport read(String categorySlug, String slug) {
+    Path json = UserflowPaths.reportDir(categorySlug, slug).resolve(JsonReportWriter.FILE_NAME);
     try {
       return MAPPER.readValue(json.toFile(), UserflowReport.class);
     } catch (IOException e) {
@@ -36,9 +41,13 @@ public final class ReportAssertions {
 
   /** The rendered {@code user-story.md} text. */
   public static String markdown(String slug) {
+    return markdown("", slug);
+  }
+
+  public static String markdown(String categorySlug, String slug) {
     try {
       return Files.readString(
-          UserflowPaths.reportDir(slug).resolve(MarkdownReportRenderer.FILE_NAME),
+          UserflowPaths.reportDir(categorySlug, slug).resolve(MarkdownReportRenderer.FILE_NAME),
           StandardCharsets.UTF_8);
     } catch (IOException e) {
       throw new UncheckedIOException("no readable user-story.md for " + slug, e);
@@ -51,8 +60,13 @@ public final class ReportAssertions {
    * exists with plausible dimensions and a content hash, and {@code recording.webm} is non-empty.
    */
   public static void assertComplete(String slug, String expectedOutcome) {
-    UserflowReport report = read(slug);
-    Path dir = UserflowPaths.reportDir(slug);
+    assertComplete("", slug, expectedOutcome);
+  }
+
+  /** The categorized spelling of {@link #assertComplete(String, String)}. */
+  public static void assertComplete(String categorySlug, String slug, String expectedOutcome) {
+    UserflowReport report = read(categorySlug, slug);
+    Path dir = UserflowPaths.reportDir(categorySlug, slug);
 
     assertEquals(expectedOutcome, report.outcome(), "outcome");
     assertTrue(
@@ -61,7 +75,7 @@ public final class ReportAssertions {
 
     // Every step line appears in the markdown Steps section, in the recorded order. Start scanning
     // at the "## Steps" header so a step line that also occurs in the description can't satisfy it.
-    String md = markdown(slug);
+    String md = markdown(categorySlug, slug);
     int stepsHeader = md.indexOf("## Steps");
     assertTrue(stepsHeader >= 0, "user-story.md has no ## Steps section");
     int cursor = stepsHeader;
@@ -130,7 +144,13 @@ public final class ReportAssertions {
    * by-step-id link resolves to a real step.
    */
   public static void assertInteraction(String slug, String from, String to, String description) {
-    UserflowReport report = read(slug);
+    assertInteraction("", slug, from, to, description);
+  }
+
+  /** The categorized spelling of {@link #assertInteraction(String, String, String, String)}. */
+  public static void assertInteraction(
+      String categorySlug, String slug, String from, String to, String description) {
+    UserflowReport report = read(categorySlug, slug);
     assertTrue(
         report.interactions() != null,
         () -> "no interactions recorded in " + slug + "'s sidecar");
@@ -156,7 +176,11 @@ public final class ReportAssertions {
    * Assert some step carries the explicit id {@code id} (e.g. one assigned via {@code Flow.as}).
    */
   public static void assertStepId(String slug, String id) {
-    UserflowReport report = read(slug);
+    assertStepId("", slug, id);
+  }
+
+  public static void assertStepId(String categorySlug, String slug, String id) {
+    UserflowReport report = read(categorySlug, slug);
     assertTrue(
         report.steps().stream().anyMatch(step -> step.id().equals(id)),
         () -> "no step with id '" + id + "' in " + report.steps());
