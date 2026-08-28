@@ -6,9 +6,11 @@ import com.microsoft.playwright.BrowserType;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
 import com.microsoft.playwright.Video;
+import eu.wohlben.qits.userflows.report.HtmlReportRenderer;
 import eu.wohlben.qits.userflows.report.JsonReportWriter;
 import eu.wohlben.qits.userflows.report.MarkdownReportRenderer;
 import eu.wohlben.qits.userflows.report.ReportRenderer;
+import eu.wohlben.qits.userflows.report.SiteIndexWriter;
 import eu.wohlben.qits.userflows.report.Slugs;
 import eu.wohlben.qits.userflows.report.UserflowPaths;
 import eu.wohlben.qits.userflows.report.UserflowReport;
@@ -69,7 +71,7 @@ public final class UserStoryExtension
   private static final String STATE_KEY = "state";
 
   private static final List<ReportRenderer> RENDERERS =
-      List.of(new JsonReportWriter(), new MarkdownReportRenderer());
+      List.of(new JsonReportWriter(), new MarkdownReportRenderer(), new HtmlReportRenderer());
 
   /** JVM-wide slug → story-name registry: two <i>different</i> stories slugging alike fail fast. */
   private static final Map<String, String> EMITTED_SLUGS = new ConcurrentHashMap<>();
@@ -278,6 +280,11 @@ public final class UserStoryExtension
       for (ReportRenderer renderer : RENDERERS) {
         renderer.render(report, state.reportDir);
       }
+      // The bundle's entry point, rewritten after EVERY story rather than in an end-of-run hook:
+      // stories emit one class at a time, so a rescan here means the index on disk is complete
+      // whenever the JVM stops — and the docs reader opens a bundle at index.html, so a bundle
+      // without one is cataloged but unreadable.
+      SiteIndexWriter.rewrite(UserflowPaths.outputRoot());
     } catch (IOException e) {
       throw new UncheckedIOException("failed to render report for '" + state.name + "'", e);
     }

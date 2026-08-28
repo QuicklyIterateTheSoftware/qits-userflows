@@ -34,7 +34,7 @@ class GreetingHarnessTest {
   }
 
   @AfterAll
-  static void reportIsComplete() {
+  static void reportIsComplete() throws java.io.IOException {
     // assertComplete also proves the screenshot's link followed the .as() rename: it resolves the
     // screenshot's step id against the steps and fails if that id no longer names a step.
     ReportAssertions.assertComplete("create-a-greeting", UserflowReport.PASSED);
@@ -46,5 +46,18 @@ class GreetingHarnessTest {
             "core loop of the demo app",
             "fill input[name=name] \"Ada\"",
             "![greeting result](greeting-shown-greeting-result.png)"));
+
+    // The browser-facing pair the extension emits beside the markdown: the story's own page, and
+    // the bundle entry point the docs reader opens — rewritten after every story, so it exists
+    // and lists this story no matter which class emits last.
+    java.nio.file.Path storyPage =
+        eu.wohlben.qits.userflows.report.UserflowPaths.reportDir("create-a-greeting")
+            .resolve("index.html");
+    org.junit.jupiter.api.Assertions.assertTrue(java.nio.file.Files.exists(storyPage));
+    String index =
+        java.nio.file.Files.readString(
+            eu.wohlben.qits.userflows.report.UserflowPaths.outputRoot().resolve("index.html"));
+    org.junit.jupiter.api.Assertions.assertTrue(
+        index.contains("href=\"create-a-greeting/index.html\""), index);
   }
 }
