@@ -16,15 +16,26 @@ classpath. It depends on **none** of the app modules; it drives qits by URL only
   `Interactions` but no `Flow` is **browserless**: no Chromium is launched, no video/screenshots
   are produced. A mixed story may take both — they share one `StepRecorder`, so steps interleave
   in call order into a single log and definition hash.
+- **`Commands`** — the shell-command recording facade: `run("git clone {} repo", url)` runs an argv
+  with **no shell** (the template is tokenized first, so a value is always exactly one argument),
+  `sh(script)` is the documented `sh -c` escape hatch, `file`/`script` write fixtures into the
+  story's private scratch dir (`UserflowPaths.workDir`, created and wiped lazily), `expectExit`/
+  `expectAnyExit`/`timeout`/`env`/`in` shape the next command, and `redact(secret)` masks a value
+  out of everything the report publishes. Every command's step, merged stdout+stderr transcript and
+  exit code are recorded **before** the exit assertion, so a failing command's output survives into
+  the bundle. Browserless like `Interactions`, and shares the same `StepRecorder`.
 - **`UserStoryExtension`** — the JUnit 5 extension: browser/video lifecycle (browser only when the
-  story asks for a `Flow`), `Flow`/`Interactions`/`UserflowContext` injection, outcome tracking,
-  report emission, the passed-story registry, and the `ExecutionCondition` that skips a dependent
-  whose precondition didn't pass.
+  story asks for a `Flow`), `Flow`/`Interactions`/`Commands`/`UserflowContext` injection, outcome
+  tracking, report emission, the passed-story registry, and the `ExecutionCondition` that skips a
+  dependent whose precondition didn't pass.
 - **`UserflowClassOrderer`** — topological class ordering over the precondition + runs-after graph.
 - **`UserflowContext`** — the shared key→value store for dependency handoff.
-- **`report/`** — the canonical `UserflowReport` model (incl. `interactions`), the JSON + markdown
-  renderers (the markdown gets an `## Interactions` mermaid `sequenceDiagram` section), and
-  `ReportAssertions` / `Slugs` / `Hashing` / `UserflowPaths`.
+- **`report/`** — the canonical `UserflowReport` model (incl. `interactions`, `commands` and
+  `files`), the JSON + markdown + HTML renderers (the markdown gets an `## Interactions` mermaid
+  `sequenceDiagram` section; a command's transcript and a written file's dump render under their own
+  step), and `ReportAssertions` / `Slugs` / `Hashing` / `UserflowPaths`. The optional list
+  components are **null, never an empty list**, when a story recorded none — a story that uses none
+  of these facades keeps the exact sidecar bytes it had before they existed.
 - **Utilities**: `UserflowTarget` (base URL + reachability self-skip), `HarnessResources` (bundled
   test-page URLs), `HarnessHttpServer` (recording local HTTP server for service harness stories),
   `Urls`.
@@ -35,8 +46,11 @@ classpath. It depends on **none** of the app modules; it drives qits by URL only
   [`userflows`](../userflows/AGENTS.md) module, organized by domain (`…userflows.project`,
   `…userflows.projectrepository`, …). This module's `src/test` holds only the framework's own
   **self-test harness stories** — `*Test` classes under `…userflows.harness` that drive a bundled
-  static page (no running qits) to cover step recording, the failure path, and the
-  ordering/skip/runs-after dependency machinery on every default build.
+  static page (no running qits) to cover step recording, the failure path, the command facade, and
+  the ordering/skip/runs-after dependency machinery on every default build — plus a handful of
+  plain unit tests for the pure pieces a story cannot pin down precisely (`CommandLineTest`,
+  `MarkdownReportRendererTest`, `HtmlReportRendererTest`, `SiteIndexWriterTest`). Harness stories
+  must stay portable: `/bin/sh` and POSIX tools only, no running qits.
 - **This split is temporary.** It keeps the framework separate from the stories ahead of the epic's
   part 4, which extracts `qits-userflows` into a standalone repository so qits-managed projects can
   depend on it. Keep the framework free of any coupling to qits internals (URL-only), so the

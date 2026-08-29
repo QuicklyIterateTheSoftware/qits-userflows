@@ -22,10 +22,16 @@ class HtmlReportRendererTest {
         "A visitor & their greeting.",
         List.of(
             new UserflowReport.Step("step-01", "navigate /"),
+            new UserflowReport.Step("wrote", "write config.txt"),
+            new UserflowReport.Step("ran", "run echo <hi>"),
             new UserflowReport.Step("shot", "screenshot \"result\"")),
         "abc123",
         List.of(
             new UserflowReport.Interaction("browser", "qits-app", "POST /greetings", "step-01")),
+        List.of(
+            new UserflowReport.Command(
+                "ran", "echo <hi>", 3, "boom & <fail>", "ran-echo-hi.txt", Boolean.TRUE)),
+        List.of(new UserflowReport.WrittenFile("wrote", "config.txt", "wrote-config-txt.txt")),
         List.of(new UserflowReport.Screenshot("shot-result.png", "the result", "shot", 12, 8, "h")),
         new UserflowReport.Video("recording.webm", 1280, 720),
         outcome);
@@ -51,6 +57,27 @@ class HtmlReportRendererTest {
     // The video is a native element over the bundled webm.
     assertTrue(html.contains("<video controls preload=\"metadata\" src=\"recording.webm\""), html);
     assertTrue(html.contains("badge passed"), html);
+    // A command draws as a terminal under its own step: escaped output, a badged exit code and a
+    // link to the full transcript. A non-zero exit accents the block.
+    assertTrue(html.contains("<pre class=\"terminal failed\">boom &amp; &lt;fail&gt;</pre>"), html);
+    assertTrue(html.contains("<span class=\"exit-bad\">exit 3</span>"), html);
+    assertTrue(html.contains("<a href=\"ran-echo-hi.txt\">full output</a>"), html);
+    // A written file draws as a light dump captioned with its path; its content comes from the
+    // artifact beside the sidecar, which this fixture deliberately does not create — a missing
+    // dump must render as an empty figure, never blow up the report.
+    assertTrue(html.contains("wrote <code>config.txt</code>"), html);
+    assertFalse(html.contains("<pre class=\"filedump\">"), html);
+  }
+
+  @Test
+  void aWrittenFileShowsTheDumpBesideTheSidecar() throws IOException {
+    Files.writeString(reportDir.resolve("wrote-config-txt.txt"), "token = <s3cret>\n");
+
+    new HtmlReportRenderer().render(report(null, UserflowReport.PASSED), reportDir);
+
+    String html = Files.readString(reportDir.resolve("index.html"));
+    assertTrue(html.contains("<pre class=\"filedump\">token = &lt;s3cret&gt;\n</pre>"), html);
+    assertFalse(html.contains("<script"), html);
   }
 
   @Test

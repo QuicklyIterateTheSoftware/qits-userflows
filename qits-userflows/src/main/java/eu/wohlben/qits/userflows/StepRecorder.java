@@ -4,12 +4,13 @@ import eu.wohlben.qits.userflows.report.Hashing;
 import eu.wohlben.qits.userflows.report.UserflowReport;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.UnaryOperator;
 
 /**
  * The single ordered step log of a story, shared by every recording facade ({@link Flow},
- * {@link Interactions}) the story received. One recorder per story is what keeps a mixed
- * browser-and-service story a <i>single</i> narrative: steps interleave in call order and hash
- * into one {@link #definitionHash()}.
+ * {@link Interactions}, {@link Commands}) the story received. One recorder per story is what keeps
+ * a mixed browser-service-shell story a <i>single</i> narrative: steps interleave in call order and
+ * hash into one {@link #definitionHash()}.
  *
  * <p>Keeps the two parallel logs documented on {@link Flow}: the <b>display</b> lines that become
  * {@code steps[]}, and the <b>fingerprint</b> (no dynamic values, no failure line) hashed into the
@@ -53,6 +54,24 @@ final class StepRecorder {
       }
     }
     steps.set(last, new UserflowReport.Step(id, steps.get(last).line()));
+  }
+
+  /**
+   * Rewrite every display line through {@code masker} — the shared implementation behind {@link
+   * Commands#redact}. Applied to the <i>whole</i> log at emit time (not just the lines the
+   * redacting facade wrote), because a secret that leaked into a {@code fill} value or into the
+   * appended {@code FAILED:} line is exactly as published as one in a command. The fingerprint is
+   * deliberately untouched: it holds templates and selectors, never values, so nothing to mask can
+   * reach it — and rewriting it would move the definition hash.
+   */
+  void maskLines(UnaryOperator<String> masker) {
+    for (int i = 0; i < steps.size(); i++) {
+      UserflowReport.Step step = steps.get(i);
+      String masked = masker.apply(step.line());
+      if (!masked.equals(step.line())) {
+        steps.set(i, new UserflowReport.Step(step.id(), masked));
+      }
+    }
   }
 
   /** Append the terminal failure as a final display step (never part of the fingerprint/hash). */
