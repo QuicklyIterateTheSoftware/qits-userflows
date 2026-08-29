@@ -105,17 +105,31 @@ public final class ReportAssertions {
           () -> "screenshot not linked to a screenshot step: " + shot);
     }
 
-    if (report.interactions() != null) {
-      for (UserflowReport.Interaction interaction : report.interactions()) {
-        // the link is by explicit step id, same discipline as a screenshot's
+    if (report.network() == null) {
+      assertTrue(
+          report.networkHash() == null,
+          "networkHash present without a network section — the two travel together");
+      assertTrue(
+          !md.contains("## Network"),
+          "user-story.md has a Network section but the sidecar records no edges");
+    } else {
+      assertTrue(!report.network().isEmpty(), "network is empty — the contract is null, never []");
+      // The hash is recomputable from the sidecar's own edges — which also proves the list is
+      // stored in its canonical (sorted, deduplicated) form.
+      assertEquals(
+          Hashing.networkHash(report.network()),
+          report.networkHash(),
+          "networkHash does not match the sidecar's own edge set");
+      int networkHeader = md.indexOf("## Network");
+      assertTrue(networkHeader >= 0, "sidecar records edges but user-story.md has no ## Network");
+      assertTrue(
+          md.indexOf("graph LR", networkHeader) >= 0,
+          "user-story.md Network section has no graph LR block");
+      for (String line : NetworkMermaid.lines(report.network())) {
         assertTrue(
-            report.steps().stream().anyMatch(step -> step.id().equals(interaction.step())),
-            () -> "interaction references unknown step id: " + interaction);
-        assertTrue(
-            md.contains(mermaidLine(interaction)),
-            () -> "interaction missing from the mermaid diagram: " + mermaidLine(interaction));
+            md.indexOf(line, networkHeader) >= 0,
+            () -> "network diagram line missing from markdown: " + line);
       }
-      assertTrue(md.contains("```mermaid"), "user-story.md has interactions but no mermaid fence");
     }
 
     if (report.commands() != null) {
@@ -169,36 +183,167 @@ public final class ReportAssertions {
   }
 
   /**
-   * Assert the sidecar records the interaction {@code from -> to: description} and that its
-   * by-step-id link resolves to a real step.
+   * Assert the sidecar records the network edge {@code (kind, from, to, label)} — observed or
+   * declared — and that the markdown draws exactly the line {@link MarkdownReportRenderer} owes
+   * that edge.
    */
-  public static void assertInteraction(String slug, String from, String to, String description) {
-    assertInteraction("", slug, from, to, description);
+  public static void assertEdge(String slug, String kind, String from, String to, String label) {
+    assertEdge("", slug, kind, from, to, label);
   }
 
-  /** The categorized spelling of {@link #assertInteraction(String, String, String, String)}. */
-  public static void assertInteraction(
-      String categorySlug, String slug, String from, String to, String description) {
+  /** The categorized spelling of {@link #assertEdge(String, String, String, String, String)}. */
+  public static void assertEdge(
+      String categorySlug, String slug, String kind, String from, String to, String label) {
+    UserflowReport.NetworkEdge match = findEdge(categorySlug, slug, kind, from, to, label);
+    String md = markdown(categorySlug, slug);
+    String line = NetworkMermaid.edgeLine(read(categorySlug, slug).network(), match);
+    assertTrue(md.contains(line), () -> "edge missing from the mermaid diagram: " + line);
+  }
+
+  /**
+   * Assert the sidecar records <b>exactly</b> {@code count} network edges. {@link #assertEdge}
+   * proves presence; this is the absence half — a stray edge (a probe a tap's skip heuristic
+   * missed, a leaked actor) is invisible to presence checks alone, so a story that pins its edges
+   * pins the count too.
+   */
+  public static void assertEdgeCount(String slug, int count) {
+    assertEdgeCount("", slug, count);
+  }
+
+  /** The categorized spelling of {@link #assertEdgeCount(String, int)}. */
+  public static void assertEdgeCount(String categorySlug, String slug, int count) {
     UserflowReport report = read(categorySlug, slug);
+    int actual = report.network() == null ? 0 : report.network().size();
+    assertEquals(
+        count,
+        actual,
+        () -> "edge count of " + slug + "; recorded: " + report.network());
+  }
+
+  /**
+   * Assert no recorded edge <b>originates</b> at {@code from} — the direct spelling of "nothing
+   * left this process", the sharpest claim a gatekeeping story makes. Unlike a total count it
+   * survives unrelated edges being added to the story later.
+   */
+  public static void assertNoEdgesFrom(String slug, String from) {
+    assertNoEdgesFrom("", slug, from);
+  }
+
+  /** The categorized spelling of {@link #assertNoEdgesFrom(String, String)}. */
+  public static void assertNoEdgesFrom(String categorySlug, String slug, String from) {
+    UserflowReport report = read(categorySlug, slug);
+    if (report.network() == null) {
+      return;
+    }
     assertTrue(
-        report.interactions() != null,
-        () -> "no interactions recorded in " + slug + "'s sidecar");
-    UserflowReport.Interaction match =
-        report.interactions().stream()
+        report.network().stream().noneMatch(edge -> edge.from().equals(from)),
+        () -> "expected no edges from " + from + " in " + slug + "; recorded: " + report.network());
+  }
+
+  /**
+   * Assert no recorded edge <b>arrives</b> at {@code to} — the mirror of {@link
+   * #assertNoEdgesFrom}, and the direct spelling of "nothing reached the thing being protected".
+   * The motivating claim is a story about a boundary rather than about a caller: an
+   * unauthenticated request must not have reached the store, a public surface must not have
+   * dialled the internal peer. Presence checks cannot make that claim and a total count cannot
+   * either — a count says how much happened, not what was spared — so this is the one that
+   * survives the story growing unrelated edges later.
+   */
+  public static void assertNoEdgesTo(String slug, String to) {
+    assertNoEdgesTo("", slug, to);
+  }
+
+  /** The categorized spelling of {@link #assertNoEdgesTo(String, String)}. */
+  public static void assertNoEdgesTo(String categorySlug, String slug, String to) {
+    UserflowReport report = read(categorySlug, slug);
+    if (report.network() == null) {
+      return;
+    }
+    assertTrue(
+        report.network().stream().noneMatch(edge -> edge.to().equals(to)),
+        () -> "expected no edges to " + to + " in " + slug + "; recorded: " + report.network());
+  }
+
+  /**
+   * Assert every recorded edge originates at one of {@code actors} — nobody else initiated
+   * anything. The motivating claim is a flow whose request <b>count</b> belongs to the client
+   * rather than to this repository (npm's update-notifier fetches a package of its own; a
+   * {@code deploy-file} is eleven requests including a checksum sidecar per algorithm), so {@link
+   * #assertEdgeCount} would pin a number the story does not promise — while the <i>set of
+   * initiators</i> is still exactly the story's promise, and a leaked actor (a tap reading the
+   * default {@code "a caller"} because a story forgot to name itself) is precisely what it catches.
+   *
+   * <p>It states nothing about presence, and a story that recorded no edges at all passes
+   * vacuously: pair it with an {@link #assertEdge} on the edge that <i>is</i> the story.
+   */
+  public static void assertOnlyEdgesFrom(String slug, String... actors) {
+    assertOnlyEdgesFrom("", slug, List.of(actors));
+  }
+
+  /**
+   * The categorized spelling of {@link #assertOnlyEdgesFrom(String, String...)}, taking the actors
+   * as a list — two varargs spellings differing only by a leading {@code String} would be
+   * ambiguous at every call site, so the categorized one names its actors explicitly.
+   */
+  public static void assertOnlyEdgesFrom(String categorySlug, String slug, List<String> actors) {
+    UserflowReport report = read(categorySlug, slug);
+    if (report.network() == null) {
+      return;
+    }
+    for (UserflowReport.NetworkEdge edge : report.network()) {
+      assertTrue(
+          actors.contains(edge.from()),
+          () ->
+              "unexpected initiator '"
+                  + edge.from()
+                  + "' in "
+                  + slug
+                  + "; expected only "
+                  + actors
+                  + "; recorded: "
+                  + report.network());
+    }
+  }
+
+  /** Assert the edge exists <b>and</b> is an author-declared one, not an observation. */
+  public static void assertDeclaredEdge(
+      String categorySlug, String slug, String kind, String from, String to, String label) {
+    UserflowReport.NetworkEdge match = findEdge(categorySlug, slug, kind, from, to, label);
+    assertTrue(
+        Boolean.TRUE.equals(match.declared()),
+        () -> "edge is observed, not declared: " + match);
+  }
+
+  private static UserflowReport.NetworkEdge findEdge(
+      String categorySlug, String slug, String kind, String from, String to, String label) {
+    UserflowReport report = read(categorySlug, slug);
+    assertTrue(report.network() != null, () -> "no network edges in " + slug + "'s sidecar");
+    UserflowReport.NetworkEdge match =
+        report.network().stream()
             .filter(
-                interaction ->
-                    interaction.from().equals(from)
-                        && interaction.to().equals(to)
-                        && interaction.description().equals(description))
+                edge ->
+                    edge.kind().equals(kind)
+                        && edge.from().equals(from)
+                        && edge.to().equals(to)
+                        && edge.label().equals(label))
             .findFirst()
             .orElse(null);
     assertTrue(
         match != null,
-        () -> "no interaction " + from + " -> " + to + ": " + description + " in " + slug);
-    assertTrue(
-        match != null
-            && report.steps().stream().anyMatch(step -> step.id().equals(match.step())),
-        () -> "interaction references unknown step id: " + match);
+        () ->
+            "no "
+                + kind
+                + " edge "
+                + from
+                + " -> "
+                + to
+                + ": "
+                + label
+                + " in "
+                + slug
+                + "; recorded: "
+                + read(categorySlug, slug).network());
+    return match;
   }
 
   /**
@@ -323,11 +468,6 @@ public final class ReportAssertions {
     for (String s : substrings) {
       assertTrue(md.contains(s), () -> "user-story.md missing expected text: " + s);
     }
-  }
-
-  /** The exact arrow line {@link MarkdownReportRenderer} draws for {@code interaction}. */
-  private static String mermaidLine(UserflowReport.Interaction interaction) {
-    return interaction.from() + "->>" + interaction.to() + ": " + interaction.description();
   }
 
   private static UserflowReport.Step stepById(UserflowReport report, String id) {

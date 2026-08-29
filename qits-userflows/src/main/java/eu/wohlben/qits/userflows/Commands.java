@@ -19,14 +19,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.function.UnaryOperator;
 import java.util.stream.Stream;
 
 /**
  * The shell-command recording facade of a {@link UserStory} — the third recording surface beside
- * {@link Flow} (a browser) and {@link Interactions} (services talking to each other). It exists for
- * the stories a browser cannot tell: a CLI is the product, or the product is <i>reached</i> through
- * one, and the evidence a reader wants is the transcript — the command as typed, the output as
- * printed, the exit code as returned.
+ * {@link Flow} (a browser) and {@link Interactions} (the narrative). It exists for the stories a
+ * browser cannot tell: a CLI is the product, or the product is <i>reached</i> through one, and the
+ * evidence a reader wants is the transcript — the command as typed, the output as printed, the exit
+ * code as returned.
  *
  * <p>Like the other two facades <b>every verb appends a step</b> to the story's single {@link
  * StepRecorder}, so a story that mixes all three reads as one narrative in call order. Anything
@@ -385,6 +386,17 @@ public final class Commands {
       return;
     }
     recorder.maskLines(line -> CommandOutput.mask(line, secrets));
+  }
+
+  /**
+   * The same masking the step log gets, as an operator the extension applies to every network
+   * edge field before it reaches the sidecar — identity when nothing was redacted.
+   */
+  UnaryOperator<String> masker() {
+    if (secrets.isEmpty()) {
+      return UnaryOperator.identity();
+    }
+    return line -> CommandOutput.mask(line, secrets);
   }
 
   /**

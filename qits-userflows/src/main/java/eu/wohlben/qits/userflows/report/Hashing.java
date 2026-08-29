@@ -22,6 +22,32 @@ public final class Hashing {
     return sha256(String.join("\n", steps).getBytes(StandardCharsets.UTF_8));
   }
 
+  /**
+   * {@code sha256:<hex>} over the canonically sorted, deduplicated network edge set. Each edge
+   * contributes its {@code (kind, from, to, label)} quadruple joined by tabs; edges join by
+   * newlines. The {@code declared} flag is deliberately excluded — the hash states <i>which
+   * dependencies exist</i>, and provenance changing (a declared edge becoming observable) should
+   * not read as the network changing. Callers pass the list exactly as the sidecar carries it
+   * (already sorted and deduplicated), which is what lets an assertion recompute and compare.
+   */
+  public static String networkHash(List<UserflowReport.NetworkEdge> edges) {
+    StringBuilder canonical = new StringBuilder();
+    for (UserflowReport.NetworkEdge edge : edges) {
+      if (canonical.length() > 0) {
+        canonical.append('\n');
+      }
+      canonical
+          .append(edge.kind())
+          .append('\t')
+          .append(edge.from())
+          .append('\t')
+          .append(edge.to())
+          .append('\t')
+          .append(edge.label());
+    }
+    return sha256(canonical.toString().getBytes(StandardCharsets.UTF_8));
+  }
+
   /** {@code sha256:<hex>} over raw bytes — a screenshot's content hash. */
   public static String sha256(byte[] bytes) {
     try {

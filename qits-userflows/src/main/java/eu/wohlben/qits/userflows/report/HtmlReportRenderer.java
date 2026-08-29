@@ -14,8 +14,8 @@ import java.util.Map;
  * and renders nothing itself, so a bundle of bare markdown is <i>cataloged but unreadable</i>
  * there; this file is what makes a userflow site open like every other docs site.
  *
- * <p><b>Self-contained by rule.</b> Styling is inline, the sequence diagram is
- * {@link SequenceDiagramSvg} rather than a script, command transcripts are plain escaped
+ * <p><b>Self-contained by rule.</b> Styling is inline, the network diagram is
+ * {@link NetworkDiagramSvg} rather than a script, command transcripts are plain escaped
  * {@code <pre>} rather than a terminal emulator, and every reference (screenshots, transcripts,
  * file dumps, the video, the site index) is relative — the page must render byte-for-byte the same
  * from a local {@code target/userstories/} directory and from the artifact store, with no network
@@ -54,7 +54,7 @@ public final class HtmlReportRenderer implements ReportRenderer {
       figcaption{font-size:.85rem;color:#59636e;margin-top:.35rem}
       video{max-width:100%;border:1px solid #d9dde2;border-radius:8px}
       .diagram{overflow-x:auto}
-      svg.sequence text{font:12px ui-monospace,'Cascadia Code',Menlo,monospace;fill:#1f2328}
+      svg.network text{font:12px ui-monospace,'Cascadia Code',Menlo,monospace;fill:#1f2328}
       footer{margin-top:3rem;font-size:.8rem;color:#8b949e;\
       font-family:ui-monospace,'Cascadia Code',Menlo,monospace}
       .fail-note{background:#fee2e2;color:#9a1c1c;border-radius:8px;padding:.7rem 1rem}
@@ -156,9 +156,9 @@ public final class HtmlReportRenderer implements ReportRenderer {
     }
     html.append("</ol>\n");
 
-    if (report.interactions() != null && !report.interactions().isEmpty()) {
-      html.append("<h2>Interactions</h2>\n<div class=\"diagram\">\n")
-          .append(SequenceDiagramSvg.render(report.interactions()))
+    if (report.network() != null && !report.network().isEmpty()) {
+      html.append("<h2>Network</h2>\n<div class=\"diagram\">\n")
+          .append(NetworkDiagramSvg.render(report.network()))
           .append("</div>\n");
     }
 

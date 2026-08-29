@@ -10,7 +10,7 @@ import java.util.Map;
 /**
  * The default renderer: turns a {@link UserflowReport} into the human-facing {@code user-story.md}
  * — description, the recorded steps with each screenshot, command transcript and written-file dump
- * interleaved beneath its own step, a mermaid sequence diagram of the recorded interactions, and a
+ * interleaved beneath its own step, a mermaid graph of the observed network edges, and a
  * link to the video. It consumes the model only (never the live run) and never emits frontmatter,
  * so the document stays a portable, readable bundle alongside its relative-linked media.
  *
@@ -70,18 +70,13 @@ public final class MarkdownReportRenderer implements ReportRenderer {
       }
     }
 
-    if (report.interactions() != null && !report.interactions().isEmpty()) {
-      // A mermaid sequence diagram of the recorded service-to-service interactions, in story
-      // order. Hyphenated service names are valid mermaid actor identifiers as-is.
-      startSection(md).append("## Interactions\n\n```mermaid\nsequenceDiagram\n");
-      for (UserflowReport.Interaction interaction : report.interactions()) {
-        md.append("    ")
-            .append(interaction.from())
-            .append("->>")
-            .append(interaction.to())
-            .append(": ")
-            .append(interaction.description())
-            .append("\n");
+    if (report.network() != null && !report.network().isEmpty()) {
+      // The observed network graph — callers rank left of the service under test, its callees
+      // right, because every edge points into or out of it. Conditional, so a story that captured
+      // nothing keeps a fence-free markdown.
+      startSection(md).append("## Network\n\n```mermaid\ngraph LR\n");
+      for (String line : NetworkMermaid.lines(report.network())) {
+        md.append(line).append("\n");
       }
       md.append("```\n");
     }
