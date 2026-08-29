@@ -9,14 +9,13 @@ import java.util.List;
  * {@code userflow.json}. The markdown writer is merely the <i>default</i> renderer over this model;
  * future renderers (the artifacts publisher) consume this record, never the markdown.
  *
- * <p>Field order and names mirror the report contract in {@code
- * docs/epics/qits-userflows/features/2026-07-19_qits-userflows.md}.
+ * <p>Field order and names mirror the report contract in {@code docs/report-contract.md}.
  *
- * <p>The optional list components ({@code interactions}, {@code commands}, {@code files}) are
- * {@code null} — never an empty list — when a story recorded none, so {@link
- * JsonInclude.Include#NON_NULL} drops the field entirely and a story that uses none of these
- * facades keeps the sidecar it had before they existed. Growing the model must never rewrite an
- * unrelated story's bytes.
+ * <p>The optional components ({@code network} + {@code networkHash}, {@code commands}, {@code
+ * files}) are {@code null} — never an empty list or a hash of nothing — when a story recorded
+ * none, so {@link JsonInclude.Include#NON_NULL} drops the field entirely and a story that uses
+ * none of these facades keeps the sidecar it had before they existed. Growing the model must
+ * never rewrite an unrelated story's bytes.
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @JsonPropertyOrder({
@@ -26,7 +25,8 @@ import java.util.List;
   "description",
   "steps",
   "definitionHash",
-  "interactions",
+  "network",
+  "networkHash",
   "commands",
   "files",
   "screenshots",
@@ -40,7 +40,8 @@ public record UserflowReport(
     String description,
     List<Step> steps,
     String definitionHash,
-    List<Interaction> interactions,
+    List<NetworkEdge> network,
+    String networkHash,
     List<Command> commands,
     List<WrittenFile> files,
     List<Screenshot> screenshots,
@@ -58,15 +59,19 @@ public record UserflowReport(
   public record Step(String id, String line) {}
 
   /**
-   * One recorded service-to-service interaction: {@code from} called {@code to}, described by the
-   * story's static description (e.g. {@code "GET /idp/jwks"}). {@code step} is the {@link
-   * Step#id() id} of the step that recorded it. Renderers draw these — in recorded order — as a
-   * sequence diagram; the field is omitted entirely for stories that record none, keeping their
-   * sidecars byte-identical to the pre-interactions shape.
+   * One edge of the story's network graph: {@code from} initiated {@code kind} traffic to {@code
+   * to}, labelled template-shaped (e.g. {@code "GET /idp/jwks -> 200"}). The list is canonically
+   * sorted and deduplicated on {@code (kind, from, to, label)} — that set, not the arrival order,
+   * is what {@code networkHash} covers, so the hash is stable across retries and races. {@code
+   * declared} is {@code true} only for an author-declared edge ({@code Network.declare}) and
+   * <b>absent</b> — not {@code false} — for an observed one (the {@link Command#truncated()}
+   * pattern); it is excluded from the hash. Renderers draw the set as a fan-in/fan-out graph; the
+   * fields are omitted entirely for stories that capture nothing, keeping their sidecars
+   * byte-identical to the pre-network shape.
    */
   @JsonInclude(JsonInclude.Include.NON_NULL)
-  @JsonPropertyOrder({"from", "to", "description", "step"})
-  public record Interaction(String from, String to, String description, String step) {}
+  @JsonPropertyOrder({"kind", "from", "to", "label", "declared"})
+  public record NetworkEdge(String kind, String from, String to, String label, Boolean declared) {}
 
   /**
    * One shell command a story ran. {@code step} is the {@link Step#id() id} of the step that ran

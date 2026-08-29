@@ -25,7 +25,7 @@ final class StepRecorder {
     return steps;
   }
 
-  /** Append a step; returns the index it occupies (what a pending screenshot/interaction keys). */
+  /** Append a step; returns the index it occupies (what a pending screenshot or command keys). */
   int record(String displayLine, String fingerprintLine) {
     int index = steps.size();
     steps.add(new UserflowReport.Step(stepId(index), displayLine));

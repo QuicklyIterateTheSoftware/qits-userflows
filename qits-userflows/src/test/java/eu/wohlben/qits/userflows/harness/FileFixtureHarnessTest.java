@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import eu.wohlben.qits.userflows.Commands;
+import eu.wohlben.qits.userflows.NetworkCapture;
 import eu.wohlben.qits.userflows.UserStory;
 import eu.wohlben.qits.userflows.UserStoryDescription;
 import eu.wohlben.qits.userflows.report.ReportAssertions;
@@ -19,12 +20,16 @@ import org.junit.jupiter.api.AfterAll;
  * {@linkplain Commands#redact redacts} the credential — the shape of every story that authenticates
  * against something.
  *
- * <p>Two things are being proved at once. The fixture's <b>content becomes a report artifact</b>
+ * <p>Three things are being proved at once. The fixture's <b>content becomes a report artifact</b>
  * (the step line carries only the path, because a config file is data and a step line is one line),
  * and the secret <b>appears nowhere in the bundle</b> — not in the sidecar, the markdown, the HTML,
  * the transcript or the file dump — while the real file on disk still carried the real value, which
  * is why the command could print it at all. The leak check scans every file in the story directory
  * as raw bytes rather than the places we happened to think of.
+ *
+ * <p>The third is that redaction reaches the <b>network</b> too. An edge label is whatever a client
+ * put on the wire, so a credential in a path would otherwise walk straight into the diagram: the
+ * story observes exactly that edge, and the emitted label carries the mask instead.
  */
 class FileFixtureHarnessTest {
 
@@ -47,6 +52,10 @@ class FileFixtureHarnessTest {
         """,
         TOKEN);
     commands.run("cat config/app.conf").as("read-back");
+
+    // A tap sees the raw wire, credential and all — recorded here exactly as one would arrive.
+    NetworkCapture.observe(
+        "http", "harness-client", "harness-server", "GET /secret/" + TOKEN + " -> 200");
   }
 
   @AfterAll
@@ -60,6 +69,9 @@ class FileFixtureHarnessTest {
     ReportAssertions.assertCommandOutputContains(SLUG, "cat config/app.conf", "example.invalid");
     // …and every rendering of it is masked, transcript and dump alike.
     ReportAssertions.assertCommandOutputContains(SLUG, "cat config/app.conf", "token = •••");
+    // The observed edge label went through the same masker before it reached the sidecar.
+    ReportAssertions.assertEdge(
+        SLUG, "http", "harness-client", "harness-server", "GET /secret/••• -> 200");
     ReportAssertions.assertNotLeaked(SLUG, TOKEN);
 
     UserflowReport report = ReportAssertions.read(SLUG);

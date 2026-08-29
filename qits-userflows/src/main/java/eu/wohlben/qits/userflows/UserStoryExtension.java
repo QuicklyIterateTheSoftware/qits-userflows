@@ -6,6 +6,7 @@ import com.microsoft.playwright.BrowserType;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
 import com.microsoft.playwright.Video;
+import eu.wohlben.qits.userflows.report.Hashing;
 import eu.wohlben.qits.userflows.report.HtmlReportRenderer;
 import eu.wohlben.qits.userflows.report.JsonReportWriter;
 import eu.wohlben.qits.userflows.report.MarkdownReportRenderer;
@@ -43,9 +44,10 @@ import org.junit.jupiter.api.extension.TestExecutionExceptionHandler;
  * under {@code target/userstories/<slug>/}.
  *
  * <p>The browser is <b>parameter-driven</b>: Chromium (and Playwright itself) is only created when
- * the story method declares a {@link Flow} parameter. A story that takes only {@link Interactions}
- * and/or {@link Commands} (and/or {@link UserflowContext}) is browserless — no driver, no video, no
- * screenshots; its report carries steps, interactions, commands and written files.
+ * the story method declares a {@link Flow} parameter. A story that takes only {@link Interactions},
+ * {@link Network} and/or {@link Commands} (and/or {@link UserflowContext}) is browserless — no
+ * driver, no video, no screenshots; its report carries steps, the network section, commands and
+ * written files.
  *
  * <p>Attached automatically via {@link UserStory @UserStory}'s {@code @ExtendWith}; stories never
  * reference it directly.
@@ -131,6 +133,10 @@ public final class UserStoryExtension
 
     StepRecorder recorder = new StepRecorder();
     Interactions interactions = new Interactions(recorder);
+    Network network = new Network();
+    // Actor stickiness ends at the story border: a story that forgets to name its initiator gets
+    // the default, never the previous story's narrative.
+    NetworkCapture.resetActor();
     // Constructed for every story, browser or not — it is cheap and inert until a verb is called.
     // Its scratch directory is created lazily inside the facade, so a story that runs no command
     // leaves no work directory behind and no commands/files in its sidecar.
@@ -160,6 +166,7 @@ public final class UserStoryExtension
                   null,
                   recorder,
                   interactions,
+                  network,
                   commands));
       return;
     }
@@ -199,6 +206,7 @@ public final class UserStoryExtension
               flow,
               recorder,
               interactions,
+              network,
               commands);
       context.getStore(NAMESPACE).put(STATE_KEY, state);
     } catch (RuntimeException | Error e) {
@@ -214,6 +222,7 @@ public final class UserStoryExtension
     Class<?> type = parameterContext.getParameter().getType();
     return type == Flow.class
         || type == Interactions.class
+        || type == Network.class
         || type == Commands.class
         || type == UserflowContext.class;
   }
@@ -227,6 +236,9 @@ public final class UserStoryExtension
     }
     if (type == Interactions.class) {
       return state(context).interactions;
+    }
+    if (type == Network.class) {
+      return state(context).network;
     }
     if (type == Commands.class) {
       return state(context).commands;
@@ -283,7 +295,9 @@ public final class UserStoryExtension
     // sidecar, the markdown, the HTML or any artifact — whatever facade recorded it.
     state.commands.maskRecordedSteps();
 
-    List<UserflowReport.Interaction> interactions = state.interactions.emit();
+    // Drained after masking is registered so a redacted secret can't survive in an edge label,
+    // and exactly once per story — the capture cursors are what attribute traffic to stories.
+    List<UserflowReport.NetworkEdge> network = state.network.emit(state.commands.masker());
     List<UserflowReport.Command> commands = state.commands.emitCommands();
     List<UserflowReport.WrittenFile> files = state.commands.emitFiles();
     UserflowReport report =
@@ -294,9 +308,10 @@ public final class UserStoryExtension
             state.description,
             List.copyOf(state.recorder.steps()),
             state.recorder.definitionHash(),
-            // null, not an empty list: a story that recorded none of these keeps the exact sidecar
-            // bytes it had before the field existed.
-            interactions.isEmpty() ? null : interactions,
+            // null, not an empty list / a hash of nothing: a story that recorded none of these
+            // keeps the exact sidecar bytes it had before the field existed.
+            network.isEmpty() ? null : network,
+            network.isEmpty() ? null : Hashing.networkHash(network),
             commands.isEmpty() ? null : commands,
             files.isEmpty() ? null : files,
             state.flow == null ? List.of() : state.flow.emitScreenshots(),
@@ -507,7 +522,7 @@ public final class UserStoryExtension
   /**
    * Mutable per-story holder kept in the extension store. The Playwright fields ({@code playwright}
    * through {@code flow}) are all {@code null} for a browserless story; {@code recorder}, {@code
-   * interactions} and {@code commands} always exist.
+   * interactions}, {@code network} and {@code commands} always exist.
    */
   private static final class StoryState {
     final String name;
@@ -524,6 +539,7 @@ public final class UserStoryExtension
     final Flow flow;
     final StepRecorder recorder;
     final Interactions interactions;
+    final Network network;
     final Commands commands;
     volatile String outcome = UserflowReport.PASSED;
 
@@ -542,6 +558,7 @@ public final class UserStoryExtension
         Flow flow,
         StepRecorder recorder,
         Interactions interactions,
+        Network network,
         Commands commands) {
       this.name = name;
       this.slug = slug;
@@ -557,6 +574,7 @@ public final class UserStoryExtension
       this.flow = flow;
       this.recorder = recorder;
       this.interactions = interactions;
+      this.network = network;
       this.commands = commands;
     }
   }

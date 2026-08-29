@@ -27,7 +27,10 @@ class HtmlReportRendererTest {
             new UserflowReport.Step("shot", "screenshot \"result\"")),
         "abc123",
         List.of(
-            new UserflowReport.Interaction("browser", "qits-app", "POST /greetings", "step-01")),
+            new UserflowReport.NetworkEdge("http", "browser", "qits-app", "POST /greetings", null),
+            new UserflowReport.NetworkEdge(
+                "process", "qits-app", "an engine", "spawn <engine>", Boolean.TRUE)),
+        "sha256:net",
         List.of(
             new UserflowReport.Command(
                 "ran", "echo <hi>", 3, "boom & <fail>", "ran-echo-hi.txt", Boolean.TRUE)),
@@ -49,10 +52,18 @@ class HtmlReportRendererTest {
     assertTrue(html.contains("href=\"../../index.html\""), html);
     // The screenshot sits under its step, relatively linked with its dimensions.
     assertTrue(html.contains("src=\"shot-result.png\" alt=\"the result\" width=\"12\""), html);
-    // The interactions draw as inline SVG — actors and the message, no script anywhere.
-    assertTrue(html.contains("<svg class=\"sequence\""), html);
+    // The network draws as inline SVG — nodes, labels and both arrowheads, no script anywhere.
+    assertTrue(html.contains("<h2>Network</h2>"), html);
+    assertTrue(html.contains("<svg class=\"network\""), html);
+    assertTrue(html.contains("<marker id=\"net-arrow\""), html);
+    assertTrue(html.contains("<marker id=\"net-arrow-declared\""), html);
     assertTrue(html.contains(">qits-app</text>"), html);
     assertTrue(html.contains(">POST /greetings</text>"), html);
+    // A declared edge is muted and carries the declared arrowhead — a claim never renders like
+    // evidence — and its label is escaped like every other machine-derived string on the page.
+    assertTrue(html.contains("stroke=\"#8b949e\" marker-end=\"url(#net-arrow-declared)\""), html);
+    assertTrue(
+        html.contains("fill=\"#8b949e\">process: spawn &lt;engine&gt;</text>"), html);
     assertFalse(html.contains("<script"), html);
     // The video is a native element over the bundled webm.
     assertTrue(html.contains("<video controls preload=\"metadata\" src=\"recording.webm\""), html);
