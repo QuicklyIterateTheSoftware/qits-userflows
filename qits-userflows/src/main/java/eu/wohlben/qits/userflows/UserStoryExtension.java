@@ -44,8 +44,8 @@ import org.junit.jupiter.api.extension.TestExecutionExceptionHandler;
  *
  * <p>The browser is <b>parameter-driven</b>: Chromium (and Playwright itself) is only created when
  * the story method declares a {@link Flow} parameter. A story that takes only {@link Interactions}
- * (and/or {@link UserflowContext}) is a browserless <b>service story</b> — no driver, no video, no
- * screenshots; its report carries steps and interactions.
+ * and/or {@link Commands} (and/or {@link UserflowContext}) is browserless — no driver, no video, no
+ * screenshots; its report carries steps, interactions, commands and written files.
  *
  * <p>Attached automatically via {@link UserStory @UserStory}'s {@code @ExtendWith}; stories never
  * reference it directly.
@@ -131,6 +131,10 @@ public final class UserStoryExtension
 
     StepRecorder recorder = new StepRecorder();
     Interactions interactions = new Interactions(recorder);
+    // Constructed for every story, browser or not — it is cheap and inert until a verb is called.
+    // Its scratch directory is created lazily inside the facade, so a story that runs no command
+    // leaves no work directory behind and no commands/files in its sidecar.
+    Commands commands = new Commands(recorder, reportDir, categorySlug, slug);
 
     // The browser exists only for stories that ask for a Flow — a browserless service story never
     // even creates Playwright (no driver extraction, no browser download).
@@ -155,7 +159,8 @@ public final class UserStoryExtension
                   null,
                   null,
                   recorder,
-                  interactions));
+                  interactions,
+                  commands));
       return;
     }
 
@@ -193,7 +198,8 @@ public final class UserStoryExtension
               video,
               flow,
               recorder,
-              interactions);
+              interactions,
+              commands);
       context.getStore(NAMESPACE).put(STATE_KEY, state);
     } catch (RuntimeException | Error e) {
       closeQuietly(browser);
@@ -206,7 +212,10 @@ public final class UserStoryExtension
   public boolean supportsParameter(ParameterContext parameterContext, ExtensionContext context)
       throws ParameterResolutionException {
     Class<?> type = parameterContext.getParameter().getType();
-    return type == Flow.class || type == Interactions.class || type == UserflowContext.class;
+    return type == Flow.class
+        || type == Interactions.class
+        || type == Commands.class
+        || type == UserflowContext.class;
   }
 
   @Override
@@ -218,6 +227,9 @@ public final class UserStoryExtension
     }
     if (type == Interactions.class) {
       return state(context).interactions;
+    }
+    if (type == Commands.class) {
+      return state(context).commands;
     }
     return state(context).flow;
   }
@@ -250,6 +262,11 @@ public final class UserStoryExtension
       throw new AssertionError(
           "@ExpectedFailure story '" + state.name + "' was expected to fail but passed");
     }
+    // Only for a story that would otherwise pass, and only after the report is on disk: a story
+    // that already failed has a better error to report, and the bundle must exist either way.
+    if (UserflowReport.PASSED.equals(state.outcome)) {
+      state.commands.checkNoPendingExpectation();
+    }
     // Record the pass only now, so a failed / @ExpectedFailure story never satisfies a
     // precondition.
     if (UserflowReport.PASSED.equals(state.outcome)) {
@@ -262,7 +279,13 @@ public final class UserStoryExtension
     // finalizing the webm must not cost us userflow.json / user-story.md.
     UserflowReport.Video video = state.browserContext == null ? null : saveVideo(state);
 
+    // Masking runs first and over the whole step log, so a redacted secret cannot reach the
+    // sidecar, the markdown, the HTML or any artifact — whatever facade recorded it.
+    state.commands.maskRecordedSteps();
+
     List<UserflowReport.Interaction> interactions = state.interactions.emit();
+    List<UserflowReport.Command> commands = state.commands.emitCommands();
+    List<UserflowReport.WrittenFile> files = state.commands.emitFiles();
     UserflowReport report =
         new UserflowReport(
             state.name,
@@ -271,7 +294,11 @@ public final class UserStoryExtension
             state.description,
             List.copyOf(state.recorder.steps()),
             state.recorder.definitionHash(),
+            // null, not an empty list: a story that recorded none of these keeps the exact sidecar
+            // bytes it had before the field existed.
             interactions.isEmpty() ? null : interactions,
+            commands.isEmpty() ? null : commands,
+            files.isEmpty() ? null : files,
             state.flow == null ? List.of() : state.flow.emitScreenshots(),
             video,
             state.outcome);
@@ -479,8 +506,8 @@ public final class UserStoryExtension
 
   /**
    * Mutable per-story holder kept in the extension store. The Playwright fields ({@code playwright}
-   * through {@code flow}) are all {@code null} for a browserless story; {@code recorder} and
-   * {@code interactions} always exist.
+   * through {@code flow}) are all {@code null} for a browserless story; {@code recorder}, {@code
+   * interactions} and {@code commands} always exist.
    */
   private static final class StoryState {
     final String name;
@@ -497,6 +524,7 @@ public final class UserStoryExtension
     final Flow flow;
     final StepRecorder recorder;
     final Interactions interactions;
+    final Commands commands;
     volatile String outcome = UserflowReport.PASSED;
 
     StoryState(
@@ -513,7 +541,8 @@ public final class UserStoryExtension
         Video video,
         Flow flow,
         StepRecorder recorder,
-        Interactions interactions) {
+        Interactions interactions,
+        Commands commands) {
       this.name = name;
       this.slug = slug;
       this.category = category;
@@ -528,6 +557,7 @@ public final class UserStoryExtension
       this.flow = flow;
       this.recorder = recorder;
       this.interactions = interactions;
+      this.commands = commands;
     }
   }
 }

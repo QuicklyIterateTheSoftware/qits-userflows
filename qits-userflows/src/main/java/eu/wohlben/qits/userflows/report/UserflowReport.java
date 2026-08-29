@@ -11,6 +11,12 @@ import java.util.List;
  *
  * <p>Field order and names mirror the report contract in {@code
  * docs/epics/qits-userflows/features/2026-07-19_qits-userflows.md}.
+ *
+ * <p>The optional list components ({@code interactions}, {@code commands}, {@code files}) are
+ * {@code null} — never an empty list — when a story recorded none, so {@link
+ * JsonInclude.Include#NON_NULL} drops the field entirely and a story that uses none of these
+ * facades keeps the sidecar it had before they existed. Growing the model must never rewrite an
+ * unrelated story's bytes.
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @JsonPropertyOrder({
@@ -21,6 +27,8 @@ import java.util.List;
   "steps",
   "definitionHash",
   "interactions",
+  "commands",
+  "files",
   "screenshots",
   "video",
   "outcome"
@@ -33,6 +41,8 @@ public record UserflowReport(
     List<Step> steps,
     String definitionHash,
     List<Interaction> interactions,
+    List<Command> commands,
+    List<WrittenFile> files,
     List<Screenshot> screenshots,
     Video video,
     String outcome) {
@@ -57,6 +67,45 @@ public record UserflowReport(
   @JsonInclude(JsonInclude.Include.NON_NULL)
   @JsonPropertyOrder({"from", "to", "description", "step"})
   public record Interaction(String from, String to, String description, String step) {}
+
+  /**
+   * One shell command a story ran. {@code step} is the {@link Step#id() id} of the step that ran
+   * it — the by-name link a renderer uses to place the transcript under its own step, exactly like
+   * a screenshot's. {@code command} is the resolved command line as recorded; {@code output} is the
+   * inline <b>excerpt</b> of the merged stdout+stderr (both renderers show this one, so they can
+   * never disagree) while {@code outputPath} names the full transcript artifact beside the sidecar.
+   *
+   * <p>A silent command carries neither: {@code output} and {@code outputPath} are both {@code
+   * null} rather than an empty string and an empty file. {@code truncated} is {@code Boolean} and
+   * set only when the capture cap actually dropped bytes, so the field is <b>absent</b> — not
+   * {@code false} — for the overwhelming majority of commands.
+   *
+   * <p>No duration is emitted. A wall-clock time would make this canonical sidecar differ on every
+   * run, the same reason {@link Video} carries no length; a command's evidence is its output and
+   * its exit code, not how long the machine took.
+   */
+  @JsonInclude(JsonInclude.Include.NON_NULL)
+  @JsonPropertyOrder({"step", "command", "exitCode", "output", "outputPath", "truncated"})
+  public record Command(
+      String step,
+      String command,
+      int exitCode,
+      String output,
+      String outputPath,
+      Boolean truncated) {}
+
+  /**
+   * One fixture file a story wrote before running against it. {@code step} is the {@link Step#id()
+   * id} of the {@code write} step, {@code path} the story-relative path as authored, and {@code
+   * contentPath} the dump of what was written, emitted beside the sidecar.
+   *
+   * <p>The content is an artifact rather than a field: a config file is data, and inlining it would
+   * bloat the canonical sidecar that reviewers diff. Renderers read the dump beside them, so the
+   * two human renderings show the same text.
+   */
+  @JsonInclude(JsonInclude.Include.NON_NULL)
+  @JsonPropertyOrder({"step", "path", "contentPath"})
+  public record WrittenFile(String step, String path, String contentPath) {}
 
   /**
    * A captured screenshot. {@code step} is the {@link Step#id() id} of the screenshot step that
