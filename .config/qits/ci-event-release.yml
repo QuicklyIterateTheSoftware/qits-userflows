@@ -1,6 +1,6 @@
 event: SCMRelease
 when:
-  - repository: { exact: qits-userflows }
+  - repository: { exact: qits-userflows-javalib }
 artifacts:
   - { type: maven, name: "eu.wohlben.qits:qits-userflows" }
 steps:
