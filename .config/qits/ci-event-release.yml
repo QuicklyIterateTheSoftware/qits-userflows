@@ -17,3 +17,14 @@ steps:
       fi
       mvn -B -ntp deploy -DskipTests \
         -DaltDeploymentRepository="qits::default::$QITS_MAVEN_REGISTRY_URL"
+      # The SBOM is the artifact's resolved dependency tree. It goes up after the deploy and before
+      # the run goes green, so no SoftwareRelease can name a version whose SBOM is missing; a failed
+      # PUT fails the release on purpose. `-pl qits-userflows` because the jar is the module, not the
+      # reactor root, and the store's root is derived from the injected registry rather than spelled.
+      mvn -B -ntp -DskipTests -pl qits-userflows \
+        org.cyclonedx:cyclonedx-maven-plugin:2.9.1:makeBom \
+        -DoutputFormat=json -DoutputName=sbom -DschemaVersion=1.6
+      sbom_base="${QITS_MAVEN_REGISTRY_URL%%/artifacts/*}/artifacts/sboms"
+      curl -fsS -X PUT -H 'Content-Type: application/vnd.cyclonedx+json' \
+        --data-binary @qits-userflows/target/sbom.json \
+        "$sbom_base/maven/eu.wohlben.qits:qits-userflows/-/$version"
