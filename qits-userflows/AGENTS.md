@@ -138,10 +138,14 @@ classpath. It depends on **none** of the app modules; it drives qits by URL only
   [`docs/report-contract.md`](docs/report-contract.md).
 - Playwright is pinned (`playwright.version`) to the Chromium baked into `docker/qits/Dockerfile`;
   bump both in lockstep. Never needs `-Dqits.variant`.
-- **Releasing this library**: push a branch to the platform git host and release it through
-  `POST /workspaces/api/branches/release?projectId=qits&repositoryName=qits-userflows-javalib` (or
-  the workspace UI) — the door takes the public `(projectId, repoName)` pair, never a storage id. A
-  library release merges into `main` only — `promotions` comes back empty because nothing
-  deploys — and the release pipeline publishes `eu.wohlben.qits:qits-userflows` under the minted
-  CalVer version to the platform Maven repository. Consumers pick it up via their upstream bump
-  trains. See release-workflow-in-workspaces.md in the qits-qits wrapper.
+- **Releasing this library**: push a branch to the platform git host and open a **release request**
+  against this repository — `POST /projects/api/repositories/<repoId>/release-requests` with
+  `{"branch","summary"}`, or the Release Requests view. Nothing merges and nothing releases at that
+  call: qits-projects folds `main` and the named branch onto a backing branch `release/<id>`,
+  `.config/qits/ci-event-release-request.yml` runs the QA build over that fold, and a **gating green
+  verdict on the fold** is what lets Auto Release stamp the CalVer, bump the manifests and tag.
+  `.config/qits/ci-event-release.yml` then builds that tag and publishes
+  `eu.wohlben.qits:qits-userflows` under the minted version to the platform Maven repository. This
+  repository carries no `deployments.yml`, so nothing deploys and `main` is finalized at the release
+  itself rather than after a deployment. Consumers pick the version up via their upstream bump
+  trains. The flow itself is qits-projects' to document.
