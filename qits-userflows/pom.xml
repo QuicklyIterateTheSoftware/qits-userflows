@@ -5,7 +5,7 @@
     <parent>
         <groupId>eu.wohlben.qits</groupId>
         <artifactId>qits-userflows-parent</artifactId>
-        <version>2026.904.223009</version>
+        <version>2026.905.91808</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
